@@ -40,7 +40,7 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
   ];
   // Step 1: Check if the prompt is about Pokémon
   const checkIntentCompletion = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: {
       systemInstruction:
@@ -73,6 +73,7 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
     role: 'assistant',
     content: JSON.stringify(intent, null, 2)
   });
+
   // Step 2 goes here
   const P = new Pokedex();
   const pokemonData = await P.getPokemonByName(intent.pokemonName.toLowerCase());
@@ -92,7 +93,7 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
   console.log(`\x1b[33mAdded Pokémon data to messages for further processing.\x1b[0m`);
 
   const finalCompletion = await client.models.generateContent({
-    model: 'gemini-2.5-flash',
+    model,
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
     config: {
       systemInstruction:
@@ -131,6 +132,7 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
       }
     }
   });
+
   const finalResponse = finalResponseSchema.parse(JSON.parse(finalCompletion.text ?? '{}'));
   if (!finalResponse) {
     res.status(500).json({ completion: 'Failed to generate a final response.' });
