@@ -14,3 +14,13 @@ export const intentSchema = z.object({
   pokemonName: z.string(),
   reason: z.string()
 });
+
+export const finalResponseSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  aboutSpecies: z.string(),
+  types: z.array(z.string()),
+  abilities: z.array(z.string()),
+  abilitiesExplained: z.string(),
+  frontSpriteURL: z.string()
+});

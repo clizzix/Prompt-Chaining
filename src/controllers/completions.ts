@@ -1,12 +1,13 @@
 import type { RequestHandler } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import type { z } from 'zod';
-import { zodResponseFormat } from 'openai/helpers/zod'; // new import
 import type { ChatCompletionMessageParam } from 'openai/resources'; // new import
-import { type PromptBodySchema, intentSchema } from '#schemas'; // import intentSchema
+import { type PromptBodySchema, intentSchema, finalResponseSchema } from '#schemas'; // import intentSchema
+import Pokedex from 'pokedex-promise-v2';
 
 type IncomingPrompt = z.infer<typeof PromptBodySchema>;
-type ResponseCompletion = { completion: string };
+type FinalResponse = z.infer<typeof finalResponseSchema>;
+type ResponseCompletion = { completion: string } | FinalResponse;
 
 export const createCompletion: RequestHandler<unknown, ResponseCompletion, IncomingPrompt> = async (
   req,
@@ -73,7 +74,67 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
     content: JSON.stringify(intent, null, 2)
   });
   // Step 2 goes here
-  res.json({
-    completion: 'To be implemented: '
+  const P = new Pokedex();
+  const pokemonData = await P.getPokemonByName(intent.pokemonName.toLowerCase());
+  if (!pokemonData) {
+    res.status(404).json({
+      completion: `Pokémon ${intent.pokemonName} not found.`
+    });
+    return;
+  }
+
+  console.log(`\x1b[32mFetched data for Pokémon: ${pokemonData.name}\x1b[0m`);
+
+  messages.push({
+    role: 'assistant',
+    content: `This is all relevant data about the Pokémon: ${intent.pokemonName}: ${JSON.stringify(pokemonData, null, 2)} Combine it with what you know about it to give the user complete answer.`
   });
+  console.log(`\x1b[33mAdded Pokémon data to messages for further processing.\x1b[0m`);
+
+  const finalCompletion = await client.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: {
+      systemInstruction:
+        'You checked if it is a Pokémon and are now providing the data to the user.',
+      temperature: 0,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.NUMBER },
+          name: { type: Type.STRING },
+          aboutSpecies: { type: Type.STRING },
+          types: { type: Type.ARRAY, items: { type: Type.STRING } },
+          abilities: { type: Type.ARRAY, items: { type: Type.STRING } },
+          abilitiesExplained: { type: Type.STRING },
+          frontSpriteURL: { type: Type.STRING }
+        },
+        required: [
+          'id',
+          'name',
+          'aboutSpecies',
+          'types',
+          'abilities',
+          'abilitiesExplained',
+          'frontSpriteURL'
+        ],
+        propertyOrdering: [
+          'id',
+          'name',
+          'aboutSpecies',
+          'types',
+          'abilities',
+          'abilitiesExplained',
+          'frontSpriteURL'
+        ]
+      }
+    }
+  });
+  const finalResponse = finalResponseSchema.parse(JSON.parse(finalCompletion.text ?? '{}'));
+  if (!finalResponse) {
+    res.status(500).json({ completion: 'Failed to generate a final response.' });
+    return;
+  }
+  res.json(finalResponse);
 };
