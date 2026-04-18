@@ -1,12 +1,13 @@
 import express from 'express';
-import { completionsRouter } from '#routes';
+import { completionsRouter, gemmaRouter } from '#routes';
 import { errorHandler, notFoundHandler } from '#middlewares';
 
 const app = express();
 const port = process.env.PORT || '3000';
 
 app.use(express.json());
-app.use('/ai', completionsRouter);
+app.use('/ai/gemini', completionsRouter);
+app.use('/ai/gemma', gemmaRouter);
 app.use('*splat', notFoundHandler);
 app.use(errorHandler);
 

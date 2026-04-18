@@ -16,16 +16,10 @@ export const createCompletion: RequestHandler<unknown, ResponseCompletion, Incom
   const { prompt } = req.body;
   // Gemini client setup
   const client = new GoogleGenAI({
-    apiKey:
-      process.env.NODE_ENV === 'development'
-        ? process.env.LOCAL_LLM_KEY
-        : process.env.GEMINI_API_KEY
+    apiKey: process.env.GEMINI_API_KEY
   });
   // Model, we define it here so we can use it in both steps
-  const model =
-    process.env.NODE_ENV === 'development'
-      ? process.env.LOCAL_LLM_MODEL!
-      : process.env.GEMINI_MODEL!;
+  const model = process.env.GEMINI_MODEL!;
   // Messages, we define it here so we can add more in the future
   const messages: ChatCompletionMessageParam[] = [
     {
