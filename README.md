@@ -4,11 +4,9 @@ test:
 
 ```bash
 # to launch a local server running with gemma 4
-
 ollama run gemma4:e4b
 
 # npm run dev in your project file
-
 npm run dev
 
 # Test the controllers

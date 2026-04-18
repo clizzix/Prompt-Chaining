@@ -1,4 +1,4 @@
-import type { finalResponseSchema, PromptBodySchema } from '#schemas';
+import type { PromptBodySchema } from '#schemas';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 
