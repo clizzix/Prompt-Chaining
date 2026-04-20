@@ -23,5 +23,9 @@ curl -s -X POST http://localhost:3000/ai/gemini/chained-prompt \
 
 curl -X POST http://localhost:3000/ai/gemini/chained-prompt \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Tell me about Pikachu"}'
+  -d '{"prompt": "Tell me about Pikachu, answer in full sentences."}'
+
+curl -s -X POST http://localhost:3000/ai/gemini/chained-prompt \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Why is the sky blue?"}'
 ```

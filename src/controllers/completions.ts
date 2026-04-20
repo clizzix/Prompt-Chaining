@@ -71,10 +71,7 @@ export const handleCompletion: RequestHandler = async (req, res) => {
     return;
   }
 
-  const history = [
-    { role: 'user', parts: [{ text: prompt }] },
-    responseContent
-  ];
+  const history = [{ role: 'user', parts: [{ text: prompt }] }, responseContent];
 
   for (const part of functionCalls) {
     const { name, args } = part.functionCall!;
