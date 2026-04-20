@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { sendPrompt } from '#controllers';
 import { validateBodyZod } from '#middlewares';
-import { PromptBodySchema } from '#schemas';
+import { promptBodySchema } from '#schemas';
 
 const gemmaRouter = Router();
 
-gemmaRouter.use(validateBodyZod(PromptBodySchema));
+gemmaRouter.use(validateBodyZod(promptBodySchema));
 
 gemmaRouter.post('/gemma-prompt', sendPrompt);
 

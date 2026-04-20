@@ -1,136 +1,119 @@
 import type { RequestHandler } from 'express';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, FunctionCallingConfigMode, type Tool } from '@google/genai';
 import type { z } from 'zod';
-import type { ChatCompletionMessageParam } from 'openai/resources'; // new import
-import { type PromptBodySchema, intentSchema, finalResponseSchema } from '#schemas'; // import intentSchema
-import Pokedex from 'pokedex-promise-v2';
+import { type promptBodySchema, type finalResponseSchema } from '#schemas';
+import { getPokemon, returnError } from '#utils';
 
-type IncomingPrompt = z.infer<typeof PromptBodySchema>;
+type IncomingPrompt = z.infer<typeof promptBodySchema>;
 type FinalResponse = z.infer<typeof finalResponseSchema>;
 type ResponseCompletion = { completion: string } | FinalResponse;
+type FunctionArgs = { pokemonName?: string; message?: string };
 
-export const createCompletion: RequestHandler<unknown, ResponseCompletion, IncomingPrompt> = async (
-  req,
-  res
-) => {
-  const { prompt } = req.body;
-  // Gemini client setup
-  const client = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-  });
-  // Model, we define it here so we can use it in both steps
-  const model = process.env.GEMINI_MODEL!;
-  // Messages, we define it here so we can add more in the future
-  const messages: ChatCompletionMessageParam[] = [
-    {
-      role: 'system',
-      content:
-        'You determine if a question is about Pokémon. You can only answer questions about a single Pokémon and not open-ended questions.'
-    },
-    {
-      role: 'user',
-      content: prompt
+const tools: Tool[] = [
+  {
+    functionDeclarations: [
+      {
+        name: 'get_pokemon',
+        description: 'Get details for a single Pokémon by name',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            pokemonName: {
+              type: Type.STRING,
+              description: 'The name of the Pokémon to get details for'
+            }
+          },
+          required: ['pokemonName']
+        }
+      },
+      {
+        name: 'return_error',
+        description: 'Return an error when the user asks something that is NOT about Pokémon.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            message: {
+              type: Type.STRING,
+              description: 'The reason why the question is not about Pokémon'
+            }
+          },
+          required: ['message']
+        }
+      }
+    ]
+  }
+];
+
+export const handleCompletion: RequestHandler = async (req, res) => {
+  const { prompt } = req.body as IncomingPrompt;
+
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  const result = await ai.models.generateContent({
+    model: process.env.GEMINI_MODEL!,
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    config: {
+      systemInstruction:
+        'You determine if a question is about Pokémon. If the user asks about a Pokémon, call get_pokemon. Otherwise, call return_error.',
+      tools,
+      toolConfig: {
+        functionCallingConfig: { mode: FunctionCallingConfigMode.ANY }
+      }
     }
+  });
+
+  const responseContent = result.candidates?.[0]?.content;
+  const parts = responseContent?.parts ?? [];
+  const functionCalls = parts.filter(p => p.functionCall);
+
+  if (!responseContent || functionCalls.length === 0) {
+    res.status(500).json({ error: 'No Tool Call generated.' });
+    return;
+  }
+
+  const history = [
+    { role: 'user', parts: [{ text: prompt }] },
+    responseContent
   ];
-  // Step 1: Check if the prompt is about Pokémon
-  const checkIntentCompletion = await client.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+
+  for (const part of functionCalls) {
+    const { name, args } = part.functionCall!;
+    const callArgs = (args ?? {}) as FunctionArgs;
+    let toolData;
+
+    if (name === 'get_pokemon') {
+      toolData = await getPokemon({ pokemonName: callArgs.pokemonName ?? '' });
+    } else {
+      toolData = await returnError({ message: callArgs.message ?? '' });
+    }
+
+    history.push({
+      role: 'tool',
+      parts: [
+        {
+          functionResponse: {
+            name,
+            response: { content: toolData }
+          }
+        }
+      ]
+    });
+  }
+
+  const finalResult = await ai.models.generateContent({
+    model: process.env.GEMINI_MODEL!,
+    contents: history,
     config: {
-      systemInstruction:
-        'You determine if a question is about Pokémon. You can You can only answer questions about a single Pokémon and not open-ended questions.',
-      temperature: 0,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          isPokemon: { type: Type.BOOLEAN },
-          type: { type: Type.STRING },
-          pokemonName: { type: Type.STRING },
-          reason: { type: Type.STRING }
-        },
-        required: ['isPokemon', 'type', 'pokemonName', 'reason'],
-        propertyOrdering: ['isPokemon', 'type', 'pokemonName', 'reason']
-      }
+      responseMimeType: 'application/json'
     }
   });
 
-  const intent = intentSchema.parse(JSON.parse(checkIntentCompletion.text ?? '{}'));
-  if (!intent?.isPokemon) {
-    res.status(400).json({
-      completion: intent?.reason || 'I cannot answer this question, try asking about a Pokémon.'
-    });
-    return;
-  }
-  console.log(`\x1b[34mIntent detected. Received a question about: ${intent.pokemonName}\x1b[0m`);
-  messages.push({
-    role: 'assistant',
-    content: JSON.stringify(intent, null, 2)
-  });
-
-  // Step 2 goes here
-  const P = new Pokedex();
-  const pokemonData = await P.getPokemonByName(intent.pokemonName.toLowerCase());
-  if (!pokemonData) {
-    res.status(404).json({
-      completion: `Pokémon ${intent.pokemonName} not found.`
-    });
+  const text = finalResult.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    res.status(500).json({ error: 'No final response generated.' });
     return;
   }
 
-  console.log(`\x1b[32mFetched data for Pokémon: ${pokemonData.name}\x1b[0m`);
-
-  messages.push({
-    role: 'assistant',
-    content: `This is all relevant data about the Pokémon: ${intent.pokemonName}: ${JSON.stringify(pokemonData, null, 2)} Combine it with what you know about it to give the user complete answer.`
-  });
-  console.log(`\x1b[33mAdded Pokémon data to messages for further processing.\x1b[0m`);
-
-  const finalCompletion = await client.models.generateContent({
-    model,
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    config: {
-      systemInstruction:
-        'You checked if it is a Pokémon and are now providing the data to the user.',
-      temperature: 0,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          id: { type: Type.NUMBER },
-          name: { type: Type.STRING },
-          aboutSpecies: { type: Type.STRING },
-          types: { type: Type.ARRAY, items: { type: Type.STRING } },
-          abilities: { type: Type.ARRAY, items: { type: Type.STRING } },
-          abilitiesExplained: { type: Type.STRING },
-          frontSpriteURL: { type: Type.STRING }
-        },
-        required: [
-          'id',
-          'name',
-          'aboutSpecies',
-          'types',
-          'abilities',
-          'abilitiesExplained',
-          'frontSpriteURL'
-        ],
-        propertyOrdering: [
-          'id',
-          'name',
-          'aboutSpecies',
-          'types',
-          'abilities',
-          'abilitiesExplained',
-          'frontSpriteURL'
-        ]
-      }
-    }
-  });
-
-  const finalResponse = finalResponseSchema.parse(JSON.parse(finalCompletion.text ?? '{}'));
-  if (!finalResponse) {
-    res.status(500).json({ completion: 'Failed to generate a final response.' });
-    return;
-  }
+  const finalResponse: ResponseCompletion = JSON.parse(text);
   res.json(finalResponse);
 };

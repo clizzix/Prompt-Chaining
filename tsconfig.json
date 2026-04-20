@@ -22,10 +22,8 @@
     "outDir": "dist",
     "rootDir": "./src",
     /* Paths */
-    "baseUrl": "./src",
-    "ignoreDeprecations": "6.0",
     "paths": {
-      "#*": ["*"]
+      "#*": ["./src/*"]
     }
   },
   "include": ["src"]

@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { createCompletion } from '#controllers';
+import { handleCompletion } from '#controllers';
 import { validateBodyZod } from '#middlewares';
-import { PromptBodySchema } from '#schemas';
+import { promptBodySchema } from '#schemas';
 
 const completionsRouter = Router();
-completionsRouter.use(validateBodyZod(PromptBodySchema));
+completionsRouter.use(validateBodyZod(promptBodySchema));
 
-completionsRouter.post('/chained-prompt', createCompletion);
+completionsRouter.post('/chained-prompt', handleCompletion);
 
 export default completionsRouter;

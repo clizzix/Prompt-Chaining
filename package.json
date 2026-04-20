@@ -23,6 +23,10 @@
     "#utils": {
       "development": "./src/utils/index.ts",
       "default": "./dist/utils/index.js"
+    },
+    "#types": {
+      "development": "./src/types/index.ts",
+      "default": "./src/types/index.js"
     }
   },
   "scripts": {

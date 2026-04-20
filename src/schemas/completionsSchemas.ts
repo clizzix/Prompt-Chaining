@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const PromptBodySchema = z.object({
+export const promptBodySchema = z.object({
   prompt: z
     .string()
     .min(1, 'Prompt cannot be empty')

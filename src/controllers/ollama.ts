@@ -1,11 +1,11 @@
-import type { PromptBodySchema } from '#schemas';
+import { promptBodySchema } from '#schemas';
 import type { RequestHandler } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
 
 const ollamaURL = 'http://127.0.0.1:11434/v1/chat/completions';
 const model = process.env.LOCAL_LLM_MODEL;
 
-type IncomingPrompt = z.infer<typeof PromptBodySchema>;
+type IncomingPrompt = z.infer<typeof promptBodySchema>;
 
 export const sendPrompt: RequestHandler<unknown, unknown, IncomingPrompt> = async (
   req,
